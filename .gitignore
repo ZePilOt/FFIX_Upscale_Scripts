@@ -1,3 +1,23 @@
+## Ignore game
+PC_FOLDER/*
+!PC_FOLDER/.gitkeep
+
+PSX_ISO/*
+!PSX_ISO/.gitkeep
+
+
+
+## ignore images
+
+*.png
+*.tiff
+*.tex
+match.json
+match_PC_PSX.json
+
+Extracted_Fields_Layers/*
+!Extracted_Fields_Layers/.gitkeep
+
 # Byte-compiled / optimized / DLL files
 __pycache__/
 *.py[cod]
