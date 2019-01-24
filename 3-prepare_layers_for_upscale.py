@@ -72,11 +72,11 @@ def combined_layer_for_upscale(field_folder):
 				continue
 
 			# If the file has paralax, we output the information and continue.
-			# The script doesn't handle parallax layers, as while it's supported by the engine, there is no
-			# field in the game using it. If it print a layer, you have an problem or use a mod.
+			# The script doesn't something particular with parallax layers, there is only one field using it. (Field2916)
+			# We still print it so we can check if we need to do something special !
 			if(layer["has_parallax"]) == 1:
 				print("parallax on", info_file)
-				continue	
+					
 
 			# We are isolating static layers for the moment.
 			if(layer["is_static"] == 0):	
@@ -103,63 +103,35 @@ def combined_layer_for_upscale(field_folder):
 					has_overlap_other = False
 						
 					# We check if this layer overlap the previous layer (without compositing)
+					
+					comparaison_foreground = np.zeros((rows, cols , num_channels), np.uint8)
+					comparaison_previous = np.zeros((rows, cols , num_channels), np.uint8)
+					pixelCoverage = 0
 					for i in range(rows):
 						for j in range(cols):
 							background_pixel_alpha = previous_layer_img[i,j][3]
 							foreground_pixel_alpha = foreground[i,j][3]
 							if foreground_pixel_alpha != 0 and background_pixel_alpha != 0:
 								if ( previous_layer_img[i,j][0] != foreground[i,j][0] and
-									 previous_layer_img[i,j][1] != foreground[i,j][1] and
-									 previous_layer_img[i,j][2] != foreground[i,j][2] 
-									):
+					 				 previous_layer_img[i,j][1] != foreground[i,j][1] and
+					 				 previous_layer_img[i,j][2] != foreground[i,j][2] 
+					 				):								
+									comparaison_foreground[i,j] = foreground[i,j]
+									comparaison_previous[i,j] = previous_layer_img[i,j]
 
-									difference = (cv2.subtract(previous_layer_img[i,j], foreground[i,j]))
-									meanDiff = cv2.mean(difference)
-									meanPx = ( meanDiff[0] + meanDiff[1] + meanDiff[2])
-
-									if meanPx > 3:
-										has_overlap = True
-
-										break
-								if has_overlap:
-									break
-							if has_overlap:
-								break
-						if has_overlap:
-							break
-
-					# The layer doesn't overlap, but we still need to check if it overlap with the current
-					# compositing of the static image.
-					# Both test could be combine to be faster, but I kept them separated so I can debug overlapping layers easily if there is any error.
-					if has_overlap == False:									
-						for i in range(rows):
-							for j in range(cols):
-								background_pixel_alpha = background[i,j][3]
-								foreground_pixel_alpha = foreground[i,j][3]
-								if foreground_pixel_alpha != 0 and background_pixel_alpha != 0:
-									if ( background[i,j][0] != foreground[i,j][0] and
-										 background[i,j][1] != foreground[i,j][1] and
-										 background[i,j][2] != foreground[i,j][2] 
-										):
-
-										difference = (cv2.subtract(background[i,j], foreground[i,j]))
-										meanDiff = cv2.mean(difference)
-										meanPx = ( meanDiff[0] + meanDiff[1] + meanDiff[2])
-
-										if meanPx > 3:
-
-											has_overlap_other = True
-
-											break
-									if has_overlap_other:
-										break
-								if has_overlap_other:
-									break
-							if has_overlap_other:
-								break	
+									pixelCoverage += 1
+					
+					if pixelCoverage != 0:
+						
+						difference = (cv2.subtract(comparaison_foreground.astype(float), comparaison_previous.astype(float)))
+						meanDiff = cv2.mean(difference)
+						meanPx = ( abs(meanDiff[0]) + abs(meanDiff[1]) + abs(meanDiff[2]))
+						
+						if meanPx > 0.01:
+							has_overlap = True
 
 					# If we don't overlap at all, we can just compositing them together
-					if has_overlap == False and has_overlap_other == False:
+					if has_overlap == False:
 
 						channels = cv2.split(foreground)
 						if len(channels) < 3:
@@ -181,6 +153,10 @@ def combined_layer_for_upscale(field_folder):
 						background = cv2.bitwise_and(background, background, mask=cv2.bitwise_not(alpha))
 						background = cv2.add(background, foreground)
 						previous_layer_without_overlap = layer
+						
+
+						previous_layer_img = cv2.bitwise_and(previous_layer_img, previous_layer_img, mask=cv2.bitwise_not(alpha))
+						previous_layer_img = cv2.add(previous_layer_img, foreground)
 
 
 					else:
@@ -231,7 +207,7 @@ def combined_layer_for_upscale(field_folder):
 						
 						previous_layer_without_overlap = layer
 					
-					previous_layer_img = foreground
+						previous_layer_img = foreground
 
 
 				else:
@@ -314,12 +290,19 @@ def combined_layer_for_upscale(field_folder):
 
 
 
-		out_static_file = os.path.join(output_field, "static_layers_%s.png" % camera )
-		if len(layers_generated) == 0 or len(layers_generated) == 1:
+		
+		if len(layers_generated) == 0 :
+			out_static_file = os.path.join(output_field, "static_layers_%s.png" % camera )
 			if os.path.exists(out_static_file) == False:
 				cv2.imwrite(out_static_file, background)
 			statics_have_overlapping = False
 			infos[camera]["static_has_overlap"] = False
+		elif len(layers_generated) == 1 :
+			out_static_file = os.path.join(output_field, "static_layers_%s_%s.png" % (camera, layer["layer_number"] ))
+			if os.path.exists(out_static_file) == False:
+				cv2.imwrite(out_static_file, background)
+			statics_have_overlapping = True
+			infos[camera]["static_has_overlap"] = True
 		else:
 			statics_have_overlapping = True
 			infos[camera]["static_has_overlap"] = True

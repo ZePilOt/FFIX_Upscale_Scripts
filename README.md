@@ -3,7 +3,7 @@ Export backgrounds for the PC & all ISO of the PSX version to the right folders 
 You need to export through the Batch menu with these settings :
 - Merge Tilesets : OFF
 - Sort Tilesets by Depth : ON
-- All titles.
+- All titles (you need to deselect the field with "FMV" in the name around "Castle" or it will crash.)
 
 Call the file name "PC" for PC version, and PSX for "PSX" version.
 
