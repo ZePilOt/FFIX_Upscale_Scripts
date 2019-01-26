@@ -4,6 +4,7 @@ import glob
 import cv2
 import shutil
 import json
+import numpy as np
 from multiprocessing import Process, Pool, Manager
 
 dir_path = os.path.dirname(os.path.realpath(__file__))
@@ -39,12 +40,21 @@ def prepare_for_hades(field_folder):
 
 	info_file = os.path.join(field_folder, "infos.json")
 	if os.path.exists(info_file) == False:
+		print("missing", info_file)
 		return
 
 	with open(info_file) as f:
 		infos = json.load(f)
 
 	field_id = infos["field_id"]
+
+	info_upscale = os.path.join(COMBINED_FIELD_FOLDER, "Field"+infos["field_id"], "infos.json")
+	if os.path.exists(info_file) == False:
+		print("error")
+		return
+	with open(info_upscale) as f:
+		info_upscale = json.load(f)	
+
 
 	# create output dir
 	output_field = os.path.join(OUT_FOLDER, "Field"+infos["field_id"])
@@ -158,8 +168,43 @@ def prepare_for_hades(field_folder):
 					r,g,b, _ = cv2.split(img_upscaled)
 				
 				img_upscaled = cv2.merge((r,g,b,a))
-
 				output_path = os.path.join(output_field, file_name  )
+
+				kernel = np.ones((5,5), np.uint8) 
+				a_erosion = cv2.erode(a, kernel, iterations=1) 
+				#a_dilation = cv2.dilate(a, kernel, iterations=1)
+				mask_overlap = cv2.subtract(a, a_erosion)
+
+				# check if we have a animation going in between...
+				if True:			
+					for anim_layer in infos[camera]["layers"]:
+						if anim_layer["is_static"] == 0 and anim_layer["is_first_of_anim"] == 1 and anim_layer["source"] == 1 and anim_layer["distance"] > layer["distance"]:
+							#upscaled_anim_layer_file =  os.path.join(UPSCALED_FIELD_FOLDER, "Field%s" % infos["field_id"], ))
+							anim_file_name = "Layer%i_%i.tiff" % (anim_layer["camera_id"], anim_layer["layer_number"])
+							alpha_layer_anim_file = os.path.join(ALPHA_FOLDER, "Field%s" % infos["field_id"], anim_file_name)
+							img_alpha_anim = cv2.imread(filename = alpha_layer_anim_file, flags = cv2.IMREAD_UNCHANGED )
+							img_alpha_anim = cv2.resize(img_alpha_anim, (0,0), fx=2.0, fy=2.0, interpolation = cv2.INTER_NEAREST)
+							img_alpha_anim = cv2.split(img_alpha_anim)[0] 
+
+							overlap_alpha = cv2.multiply(img_alpha_anim, a_erosion)
+							count = cv2.countNonZero(overlap_alpha)
+							if count != 0:
+
+								layer_anim_file = os.path.join(UPSCALED_FIELD_FOLDER, "Field%s" % infos["field_id"], "anim_layer_%s_%i.png" % (camera, anim_layer["layer_number"]))
+								img_anim_upscale = cv2.imread(filename = layer_anim_file, flags = cv2.IMREAD_UNCHANGED )
+								has_overlap = False
+								for i in range(rows):
+									for j in range(cols):
+										if mask_overlap[i,j] != 0 and img_alpha_anim[i,j] != 0:
+											has_overlap = True
+											img_upscaled[i,j] =  img_anim_upscale[i,j]
+
+								if has_overlap:
+									print(output_path, "has", layer_anim_file) 
+
+
+
+				
 				cv2.imwrite(output_path, img_upscaled)
 
 			else:
