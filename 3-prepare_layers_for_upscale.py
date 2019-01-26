@@ -52,6 +52,7 @@ def combined_layer_for_upscale(field_folder):
 	# testing all cameras for the field.
 	for camera in infos_pc[field_id]:
 
+		num_layers = len(infos[camera]["layers"])
 		first_layer = True
 	
 		layers_static = []
@@ -84,6 +85,8 @@ def combined_layer_for_upscale(field_folder):
 			
 			layers_static.append(layer)
 
+
+		layer_static_count = 0
 		# The actual process for static layers.
 		for layer in layers_static:
 
@@ -101,7 +104,8 @@ def combined_layer_for_upscale(field_folder):
 
 					has_overlap = False
 					has_overlap_other = False
-						
+					
+					
 					# We check if this layer overlap the previous layer (without compositing)
 					
 					comparaison_foreground = np.zeros((rows, cols , num_channels), np.uint8)
@@ -158,6 +162,12 @@ def combined_layer_for_upscale(field_folder):
 						previous_layer_img = cv2.bitwise_and(previous_layer_img, previous_layer_img, mask=cv2.bitwise_not(alpha))
 						previous_layer_img = cv2.add(previous_layer_img, foreground)
 
+						if layer_static_count == len(layers_static) - 1 :
+							if len(layers_generated) > 0:
+								layers_generated.append((layer["layer_number"], layer["layer_id"]))
+								out_static_file = os.path.join(output_field, "static_layers_%s_%s.png" % (camera, layer["layer_number"] ))
+								if os.path.exists(out_static_file) == False:
+									cv2.imwrite(out_static_file, background)
 
 					else:
 						#the layer on front overlap the one in the background.
@@ -185,7 +195,8 @@ def combined_layer_for_upscale(field_folder):
 										if foreground_pixel[3] != 0 and background_pixel[3] == 0:
 											altered_bg[i,j] = foreground_pixel								
 
-						layers_generated.append(previous_layer_without_overlap["layer_number"])
+
+						layers_generated.append((previous_layer_without_overlap["layer_number"], previous_layer_without_overlap["layer_id"]))
 
 
 						if os.path.exists(os.path.join(output_field, "static_layers_%s_%i.png" % (camera, previous_layer_without_overlap["layer_number"]))) == False:
@@ -200,7 +211,7 @@ def combined_layer_for_upscale(field_folder):
 						background = cv2.add(background, foreground)
 						
 						if layer["layer_number"] == layers_static[-1]["layer_number"]:
-							layers_generated.append(layer["layer_number"])
+							layers_generated.append((layer["layer_number"], layer["layer_id"]))
 
 							if os.path.exists(os.path.join(output_field, "static_layers_%s_%i.png" % (camera, layer["layer_number"]))) == False:
 								cv2.imwrite(os.path.join(output_field, "static_layers_%s_%i.png" % (camera, layer["layer_number"])), background)
@@ -289,7 +300,7 @@ def combined_layer_for_upscale(field_folder):
 				first_layer = False
 
 
-
+			layer_static_count += 1
 		
 		if len(layers_generated) == 0 :
 			out_static_file = os.path.join(output_field, "static_layers_%s.png" % camera )
@@ -302,14 +313,14 @@ def combined_layer_for_upscale(field_folder):
 			if os.path.exists(out_static_file) == False:
 				cv2.imwrite(out_static_file, background)
 			statics_have_overlapping = True
+			layers_generated.append((layer["layer_number"], layer["layer_id"]))
 			infos[camera]["static_has_overlap"] = True
 		else:
 			statics_have_overlapping = True
 			infos[camera]["static_has_overlap"] = True
 
-
-		
 		# then animation layers
+		
 		for layer in infos[camera]["layers"]:
 
 			if layer["camera_id"] != int(camera):
@@ -323,28 +334,121 @@ def combined_layer_for_upscale(field_folder):
 
 				file_name = "Layer%i_%i.tiff" % (layer["camera_id"], layer["layer_number"])
 				layer_file_anim = os.path.join(field_folder, file_name)
-				frame = cv2.imread(filename = layer_file_anim, flags = cv2.IMREAD_UNCHANGED )		
+				frame = cv2.imread(filename = layer_file_anim, flags = cv2.IMREAD_UNCHANGED )
 				
 				channels = cv2.split(frame)
 				alpha = channels[3]
 
 
 				if statics_have_overlapping == False:
-					composited_frame = cv2.bitwise_and(background, background, mask=cv2.bitwise_not(alpha))
-					composited_frame = cv2.add(frame, composited_frame)
-					
-				else:
-					
-					if layer["layer_number"] < layers_generated[0]:
-						layer_file_to_load = os.path.join(output_field, "static_layers_%s_%i.png" % (camera, layers_generated[0]))
 
-					elif layer["layer_number"] > layers_generated[-1]:
-						layer_file_to_load = os.path.join(output_field, "static_layers_%s_%i.png" % (camera, layers_generated[-1]))
-					else:
-						for static_layer in layers_generated:
-							if static_layer < layer["layer_number"]:
+					specialCase = False
+
+					# special case. Could be detected, but it's easier this way.
+					if infos["field_id"] == "357":
+						composited_frame = background
+
+						if layer["layer_number"] >= 13 and layer["layer_number"] <= 28:			
+								specialCase = True
+								offsetAnimOmbre = 7 + ( layer["layer_number"] - 13 )
+								if offsetAnimOmbre >= (7 + 8):
+									offsetAnimOmbre -= 8									
+								if offsetAnimOmbre >= (7 + 4):
+									offsetAnimOmbre -= 4
+
+							
+
+								layer_file_to_load = os.path.join(field_folder, "Layer0_%i.tiff" % offsetAnimOmbre)
+								background_add = cv2.imread(filename = layer_file_to_load, flags = cv2.IMREAD_UNCHANGED )	
+								channels_add = cv2.split(background_add)
+								composited_frame = cv2.bitwise_and(composited_frame, composited_frame, mask=cv2.bitwise_not(channels_add[3]))
+								composited_frame = cv2.add(background_add, composited_frame)
+
+
+								if  layer["layer_number"] <= 24:
+									# 25 to 28
+									offsetOtherRoue = layer["layer_number"] + 12
+									if offsetOtherRoue > 28 + 4:
+									 	offsetOtherRoue -= 8									
+									if offsetOtherRoue > 28:
+									 	offsetOtherRoue -= 4	
+
+									layer_file_to_load = os.path.join(field_folder, "Layer0_%i.tiff" % offsetOtherRoue)
+									background_add = cv2.imread(filename = layer_file_to_load, flags = cv2.IMREAD_UNCHANGED )	
+									channels_add = cv2.split(background_add)
+									composited_frame = cv2.bitwise_and(composited_frame, composited_frame, mask=cv2.bitwise_not(channels_add[3]))
+									composited_frame = cv2.add(background_add, composited_frame)
+
 								
-								layer_file_to_load = os.path.join(output_field, "static_layers_%s_%i.png" % (camera, static_layer))
+								composited_frame = cv2.bitwise_and(composited_frame, composited_frame, mask=cv2.bitwise_not(alpha))
+								composited_frame = cv2.add(frame, composited_frame)		
+
+
+						if layer["layer_number"] >= 17 and layer["layer_number"] <= 28:	
+								specialCase = True
+
+								offsetAnimRoue = 13 + ( layer["layer_number"] - 13 )
+								if offsetAnimRoue >= (13 + 8):
+									offsetAnimRoue -= 8									
+								if offsetAnimRoue >= (13 + 4):
+									offsetAnimRoue -= 4
+
+
+								layer_file_to_load = os.path.join(field_folder, "Layer0_%i.tiff" % offsetAnimRoue)
+								background_add = cv2.imread(filename = layer_file_to_load, flags = cv2.IMREAD_UNCHANGED )	
+								channels_add = cv2.split(background_add)
+								composited_frame = cv2.bitwise_and(composited_frame, composited_frame, mask=cv2.bitwise_not(channels_add[3]))
+								composited_frame = cv2.add(background_add, composited_frame)
+								
+								composited_frame = cv2.bitwise_and(composited_frame, composited_frame, mask=cv2.bitwise_not(alpha))
+								composited_frame = cv2.add(frame, composited_frame)	
+
+						if layer["layer_number"] >= 25 and layer["layer_number"] <= 28:		
+							pass							
+								#layer_file_to_load = os.path.join(field_folder, "Layer0_%i.tiff" % offsetAnimRoue)
+								 #background_add = cv2.imread(filename = layer_file_to_load, flags = cv2.IMREAD_UNCHANGED )	
+								#channels_add = cv2.split(background_add)
+								#composited_frame = cv2.bitwise_and(composited_frame, composited_frame, mask=cv2.bitwise_not(channels_add[3]))
+								#composited_frame = cv2.add(background_add, composited_frame)
+								
+								# composited_frame = cv2.bitwise_and(composited_frame, composited_frame, mask=cv2.bitwise_not(alpha))
+								# composited_frame = cv2.add(frame, composited_frame)																
+
+
+					if not specialCase:
+						composited_frame = cv2.bitwise_and(background, background, mask=cv2.bitwise_not(alpha))
+						composited_frame = cv2.add(frame, composited_frame)
+
+				else:
+
+					minLayerId = 9999
+
+					for x in layers_generated:
+						if x[1] < minLayerId:
+							minLayerId = x[1]
+					maxLayerId = 0
+					for x in layers_generated:
+						if x[1] > minLayerId:
+							maxLayerId = x[1]					
+					
+					if layer["layer_id"] < minLayerId:
+						for x in layers_generated:
+							if x[1] == minLayerId:
+								layer_file_to_load = os.path.join(output_field, "static_layers_%s_%i.png" % (camera, x[0]))
+								break
+					elif layer["layer_id"] > maxLayerId:
+						for x in layers_generated:
+							if x[1] == maxLayerId:
+								layer_file_to_load = os.path.join(output_field, "static_layers_%s_%i.png" % (camera, x[0]))	
+								break
+					else:
+						maxLayerUsed = 0
+						for x in layers_generated:
+							if layer["layer_id"] < x[1]  and x[1] > maxLayerUsed:
+								layer_file_to_load = os.path.join(output_field, "static_layers_%s_%i.png" % (camera, x[0]))
+								maxLayerUsed = x[1]
+							elif layer["layer_id"] < x[1]  and x[1] < maxLayerUsed:
+								print("weird order ?", field_id)
 
 
 					background = cv2.imread(filename = layer_file_to_load, flags = cv2.IMREAD_UNCHANGED )		
