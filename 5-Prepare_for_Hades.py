@@ -34,6 +34,7 @@ UNIQUE_LIST_PC = os.path.join(dir_path, "Unique_Fields_PC.json")
 with open(UNIQUE_LIST_PC) as f:
 	infos_pc = json.load(f)
 
+fields_overlap_static = ["351"]
 
 def prepare_for_hades(field_folder):
 	
@@ -111,7 +112,7 @@ def prepare_for_hades(field_folder):
 					try:
 						result = min(fi)
 						upscaled_static_layer_file = map_static_layers[result]
-						print(upscaled_static_layer_file)
+						
 					except ValueError:
 						upscaled_static_layer_file =  os.path.join(UPSCALED_FIELD_FOLDER, "Field%s" % infos["field_id"], "static_layers_%i.png" % (layer["camera_id"]))
 						if os.path.exists(upscaled_static_layer_file) == False:
@@ -123,6 +124,15 @@ def prepare_for_hades(field_folder):
 					upscaled_static_layer_file =  os.path.join(UPSCALED_FIELD_FOLDER, "Field%s" % infos["field_id"], "static_layers_%i.png" % (layer["camera_id"]))
 
 	
+				# special case for 766
+				if field_id == "766":
+					if (layer["layer_number"] % 2) == 0:
+						upscaled_static_layer_file = os.path.join(UPSCALED_FIELD_FOLDER, "Field%s" % infos["field_id"], "static_layers_%i.png" % (layer["camera_id"]))
+					else:
+						upscaled_static_layer_file = os.path.join(UPSCALED_FIELD_FOLDER, "Field%s" % infos["field_id"], "static_layers_%i_1.png" % (layer["camera_id"]))
+
+
+
 				layer_file = os.path.join(field_folder, file_name)
 
 				# Check, shouldn't happens if everything was good.
@@ -176,7 +186,7 @@ def prepare_for_hades(field_folder):
 				mask_overlap = cv2.subtract(a, a_erosion)
 
 				# check if we have a animation going in between...
-				if True:			
+				if True and field_id != "506":			
 					for anim_layer in infos[camera]["layers"]:
 						if anim_layer["is_static"] == 0 and anim_layer["is_first_of_anim"] == 1 and anim_layer["source"] == 1 and anim_layer["distance"] > layer["distance"]:
 							#upscaled_anim_layer_file =  os.path.join(UPSCALED_FIELD_FOLDER, "Field%s" % infos["field_id"], ))
